@@ -87,7 +87,6 @@ volatile struct rtc_data
   unsigned int dig[5];
 } rtc_data_ins;
 
-
 void timer_init(void){
   TIMSK |= (1 << TOIE0); 
   TCCR0 |= ((1 << CS01)|(1 << CS00));
@@ -160,22 +159,19 @@ void vfd_time_drive(int col){
 
 // UART modules
 
-void uart_init (void)
-{
+void uart_init (void){
   UBRRH = (BAUDRATE>>8);
   UBRRL = BAUDRATE;
   UCSRB = (1<<TXEN);
   UCSRC|= (1<<URSEL)|(1<<UCSZ0)|(1<<UCSZ1);
 }
 
-void uart_transmit(unsigned char data)
-{
+void uart_transmit(unsigned char data){
   while (!( UCSRA & (1<<UDRE)));
   UDR = data;
 }
 
-void uart_sendmsg(unsigned char *str, unsigned char flg)
-{
+void uart_sendmsg(unsigned char *str, unsigned char flg){
     if (flg == 'r') uart_transmit(13);
     while (*str != '\0')
     {
@@ -233,7 +229,6 @@ void i2cerror(void) {
   uart_sendmsg("i2c error ",'n');  
 }
 
-
 //rtc modules
 
 void rtc_osc(void){
@@ -284,8 +279,7 @@ void rtcupdate(void) {
 
 //main
 
-int main(void)
-{
+int main(void){
   port_init();
   _delay_ms(300);
   uart_init();
