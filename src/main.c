@@ -84,8 +84,16 @@ unsigned char md=0;
 
 volatile struct rtc_data
 {
-  unsigned int dig[5];
+  unsigned int dig[6];
 } rtc_data_ins;
+
+volatile struct rtc_config
+{
+  unsigned int dig[4];
+  int status;
+} rtc_config_ins;
+
+// timer
 
 void timer_init(void){
   TIMSK |= (1 << TOIE0); 
@@ -105,6 +113,63 @@ ISR(TIMER0_OVF_vect){
   }
 }
 
+//int0/1
+
+void int_init(void){
+  MCUCR |= ((1 << ISC11)|(1 << ISC01));
+  GIMSK |= ((1 << INT0)|(1 << INT1));
+  rtc_config_ins.dig[0] = 0;
+  rtc_config_ins.dig[1] = 0;
+  rtc_config_ins.dig[2] = 0;
+  rtc_config_ins.dig[3] = 0;
+  rtc_config_ins.status = -1;
+}
+
+ISR(INT0_vect){
+  _delay_ms(20); 
+  if(rtc_config_ins.status != -1){
+    switch (rtc_config_ins.status){
+    case 0:
+      if (rtc_config_ins.dig[0] < 2){
+        rtc_config_ins.dig[0]++;
+      }else{
+        rtc_config_ins.dig[0] = 0;
+      }
+      break;
+    case 1:
+      if (rtc_config_ins.dig[0] != 2 && rtc_config_ins.dig[1] < 9){
+        rtc_config_ins.dig[1]++;
+      }else if (rtc_config_ins.dig[0] == 2 && rtc_config_ins.dig[1] < 3){
+        rtc_config_ins.dig[1]++;
+      }else{
+        rtc_config_ins.dig[1] = 0;
+      }
+      break;
+    case 2:
+      if (rtc_config_ins.dig[2] < 5){
+        rtc_config_ins.dig[2]++;
+      }else{
+        rtc_config_ins.dig[2] = 0;
+      }
+      break;
+    case 3:
+      if (rtc_config_ins.dig[3] < 9){
+        rtc_config_ins.dig[3]++;
+      }else{
+        rtc_config_ins.dig[3] = 0;
+      }
+      break;
+    default:
+      break;
+    }
+  }
+}
+
+ISR(INT1_vect){
+  _delay_ms(20); 
+  rtc_config_ins.status++;
+}
+
 // port modules
 
 void port_init(void){
@@ -112,49 +177,6 @@ void port_init(void){
   DDRC |= 0x07;
   DDRD |= 0xe0;
   PORTD |= 0x0c; //pull-up
-}
-
-void vfd_atom_drive(int dig[],int col){
-  for (size_t i = 0; i < 4; i++){
-    PORTB &= ~(PORTB_SEG_MASK | PORTB_DIG_MASK);
-    PORTC &= ~PORTC_SEG_MASK;
-    PORTD &= ~PORTD_DIG_MASK;
-    _delay_us(1);
-    PORTB |= (segmat[dig[i]][PORTB_SEG] | digmat[i][PORTB_DIG]);
-    if (col)
-    {
-      PORTC |= (segmat[dig[i]][PORTC_SEG] | PORTC_COL);
-      PORTD |= (digmat[i][PORTD_DIG] | PORTD_COL);
-    } else {
-      PORTC |= (segmat[dig[i]][PORTC_SEG] & ~PORTC_COL);
-      PORTD |= (digmat[i][PORTD_DIG] & ~PORTD_COL);
-    }
-    
-    //PORTC |= (col)?segmat[dig[i]][PORTC_SEG] | PORTC_COL : segmat[dig[i]][PORTC_SEG] & ~PORTC_COL;
-    //PORTD |= (col)?digmat[i][PORTD_DIG] | PORTD_COL : digmat[i][PORTD_DIG] & ~PORTD_COL;
-    _delay_us(49);
-  }
-}
-
-void vfd_time_drive(int col){
-  for (size_t i = 0; i < 4; i++){
-    //int tmp = (rtc_data_ins.dig[i]!=0)?rtc_data_ins.dig[i]-1:0;
-    int tmp = rtc_data_ins.dig[i];
-    PORTB &= ~(PORTB_SEG_MASK | PORTB_DIG_MASK);
-    PORTC &= ~PORTC_SEG_MASK;
-    PORTD &= ~PORTD_DIG_MASK;
-    _delay_us(1);
-    PORTB |= (segmat[tmp][PORTB_SEG] | digmat[i][PORTB_DIG]);
-    if (col)
-    {
-      PORTC |= (segmat[tmp][PORTC_SEG] | PORTC_COL);
-      PORTD |= (digmat[i][PORTD_DIG] | PORTD_COL);
-    } else {
-      PORTC |= (segmat[tmp][PORTC_SEG] & ~PORTC_COL);
-      PORTD |= (digmat[i][PORTD_DIG] & ~PORTD_COL);
-    }
-    _delay_us(99);
-  }
 }
 
 // UART modules
@@ -277,6 +299,69 @@ void rtcupdate(void) {
   rtc_data_ins.dig[5] = (u8data & 0x0F);
 }
 
+//vfd modules
+
+void vfd_atom_drive(int dig[],int col){
+  for (size_t i = 0; i < 4; i++){
+    int tmp = dig[i];
+    PORTB &= ~(PORTB_SEG_MASK | PORTB_DIG_MASK);
+    PORTC &= ~PORTC_SEG_MASK;
+    PORTD &= ~PORTD_DIG_MASK;
+    _delay_us(1);
+    PORTB |= (segmat[tmp][PORTB_SEG] | digmat[i][PORTB_DIG]);
+    if (col)
+    {
+      PORTC |= (segmat[tmp][PORTC_SEG] | PORTC_COL);
+      PORTD |= (digmat[i][PORTD_DIG] | PORTD_COL);
+    } else {
+      PORTC |= (segmat[tmp][PORTC_SEG] & ~PORTC_COL);
+      PORTD |= (digmat[i][PORTD_DIG] & ~PORTD_COL);
+    }
+    _delay_us(99);
+  }
+}
+
+void vfd_time_drive(int col){
+  for (size_t i = 0; i < 4; i++){
+    //int tmp = (rtc_data_ins.dig[i]!=0)?rtc_data_ins.dig[i]-1:0;
+    int tmp = rtc_data_ins.dig[i];
+    PORTB &= ~(PORTB_SEG_MASK | PORTB_DIG_MASK);
+    PORTC &= ~PORTC_SEG_MASK;
+    PORTD &= ~PORTD_DIG_MASK;
+    _delay_us(1);
+    PORTB |= (segmat[tmp][PORTB_SEG] | digmat[i][PORTB_DIG]);
+    if (col)
+    {
+      PORTC |= (segmat[tmp][PORTC_SEG] | PORTC_COL);
+      PORTD |= (digmat[i][PORTD_DIG] | PORTD_COL);
+    } else {
+      PORTC |= (segmat[tmp][PORTC_SEG] & ~PORTC_COL);
+      PORTD |= (digmat[i][PORTD_DIG] & ~PORTD_COL);
+    }
+    _delay_us(99);
+  }
+}
+
+void vfd_config_mode(void){
+
+  // uart_transmit(rtc_config_ins.dig[0]+0x30);
+  // uart_transmit(rtc_config_ins.dig[1]+0x30);
+  // uart_transmit(':');
+  // uart_transmit(rtc_config_ins.dig[2]+0x30);
+  // uart_transmit(rtc_config_ins.dig[3]+0x30);
+  // uart_transmit(',');
+  // uart_transmit(rtc_config_ins.status+0x30);
+  // uart_transmit(10);uart_transmit(13);
+  vfd_atom_drive(rtc_config_ins.dig,1);
+  if (rtc_config_ins.status == 4)
+  {
+    uart_sendmsg("config done",'n');
+    rtc_config_ins.status = -1;
+    return;
+  }
+  
+}
+
 //main
 
 int main(void){
@@ -289,27 +374,35 @@ int main(void){
   uart_sendmsg("rtc init done",'n');
   timer_init();
   uart_sendmsg("timer init done",'n');
+  int_init();
+  uart_sendmsg("INTs init done",'n');
   sei();
   unsigned char buf[10];
 
   while (1)
   {
-    rtcupdate();
-    int coltmp = rtc_data_ins.dig[5]%2;
-
-    for (size_t i = 0; i < 100; i++)
+    if (rtc_config_ins.status == -1)
     {
-      vfd_time_drive(coltmp);
+      rtcupdate();
+      int coltmp = rtc_data_ins.dig[5]%2;
+
+      for (size_t i = 0; i < 100; i++)
+      {
+        vfd_time_drive(coltmp);
+      }
+      // uart_transmit(rtc_data_ins.dig[0]+0x30);
+      // uart_transmit(rtc_data_ins.dig[1]+0x30);
+      // uart_transmit(':');
+      // uart_transmit(rtc_data_ins.dig[2]+0x30);
+     // uart_transmit(rtc_data_ins.dig[3]+0x30);
+     // uart_transmit(':');
+     // uart_transmit(rtc_data_ins.dig[4]+0x30);
+     // uart_transmit(rtc_data_ins.dig[5]+0x30);
+     // uart_transmit(13);
+    }else{
+      vfd_config_mode();
     }
-    // uart_transmit(rtc_data_ins.dig[0]+0x30);
-    // uart_transmit(rtc_data_ins.dig[1]+0x30);
-    // uart_transmit(':');
-    // uart_transmit(rtc_data_ins.dig[2]+0x30);
-    // uart_transmit(rtc_data_ins.dig[3]+0x30);
-    // uart_transmit(':');
-    // uart_transmit(rtc_data_ins.dig[4]+0x30);
-    // uart_transmit(rtc_data_ins.dig[5]+0x30);
-    // uart_transmit(13);
+
   }
 
   return 0;
