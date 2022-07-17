@@ -9,8 +9,8 @@
 #define FOSC F_CPU
 #define UART_BAUD 1200
 #define BAUDRATE ((F_CPU)/(UART_BAUD*16UL)-1)
-//#define RTC_ADDR 0x68
-#define RTC_ADDR 0xD0
+#define RTC_ADDR_1 0x68
+#define RTC_ADDR_2 0xD0
 #define PORTB_SEG_MASK 0x3E
 #define PORTB_DIG_MASK 0x81
 #define PORTB_SEG 0
@@ -92,6 +92,28 @@ volatile struct rtc_config
   unsigned int dig[4];
   int status;
 } rtc_config_ins;
+
+//prototype
+void timer_init(void);
+void int_init(void);
+void port_init(void);
+void uart_transmit(unsigned char);
+void uart_sendmsg(unsigned char *, unsigned char);
+void i2cinit(void);
+void i2cstart(void);
+void i2cstop(void) ;
+void i2cwrite(uint8_t);
+uint8_t i2creadack(void);
+uint8_t i2creadnak(void);
+uint8_t i2cgetstatus(void) ;
+void i2cerror(void);
+void rtc_osc(void);
+uint8_t rtc_read(uint8_t);
+void rtcupdate(void);
+void vfd_atom_drive(int[],int );
+void vfd_time_drive(int );
+void vfd_config_mode(void);
+void rtcset(void);
 
 // timer
 
@@ -256,7 +278,7 @@ void i2cerror(void) {
 void rtc_osc(void){
   i2cstart();
 	if (i2cgetstatus() != 0x08) i2cerror();
-	i2cwrite((uint8_t)(RTC_ADDR));
+	i2cwrite((uint8_t)(RTC_ADDR_2));
 	if (i2cgetstatus() != 0x18) i2cerror();
 	i2cwrite((uint8_t)(0x00));
 	if (i2cgetstatus() != 0x28) i2cerror();
@@ -269,13 +291,13 @@ uint8_t rtc_read(uint8_t mem) {
 	uint8_t u8data;
 	i2cstart();
 	if (i2cgetstatus() != 0x08) i2cerror();
-	i2cwrite((uint8_t)(RTC_ADDR));
+	i2cwrite((uint8_t)(RTC_ADDR_2));
 	if (i2cgetstatus() != 0x18) i2cerror();
 	i2cwrite((uint8_t)(mem));
 	if (i2cgetstatus() != 0x28) i2cerror();
 	i2cstart();
 	if (i2cgetstatus() != 0x10) i2cerror();
-	i2cwrite((uint8_t)(RTC_ADDR + 1));
+	i2cwrite((uint8_t)(RTC_ADDR_2 + 1));
 	if (i2cgetstatus() != 0x40) i2cerror();
 	u8data = i2creadnak();
 	if (i2cgetstatus() != 0x58) i2cerror();
@@ -298,6 +320,28 @@ void rtcupdate(void) {
   rtc_data_ins.dig[4] = ((u8data & 0xF0) >> 4);
   rtc_data_ins.dig[5] = (u8data & 0x0F);
 }
+
+void rtcset(void){
+  uint8_t s = 0x00;
+  uint8_t m = (rtc_config_ins.dig[2] << 4) | (rtc_config_ins.dig[3]);
+  uint8_t h = (rtc_config_ins.dig[0] << 4) | (rtc_config_ins.dig[1]);
+	i2cstart();
+	if (i2cgetstatus() != 0x08) i2cerror();
+	i2cwrite((uint8_t)(RTC_ADDR_2));
+  if (i2cgetstatus() != 0x18) i2cerror();
+	i2cwrite((uint8_t)(0x00));
+  if (i2cgetstatus() != 0x28) i2cerror();
+	i2cwrite((uint8_t)(s)); //s
+  if (i2cgetstatus() != 0x28) i2cerror();
+	i2cwrite((uint8_t)(m)); //m
+  if (i2cgetstatus() != 0x28) i2cerror();
+	i2cwrite((uint8_t)(h)); //s
+  if (i2cgetstatus() != 0x28) i2cerror();
+  i2cstop();
+}
+
+
+
 
 //vfd modules
 
@@ -355,6 +399,7 @@ void vfd_config_mode(void){
   vfd_atom_drive(rtc_config_ins.dig,1);
   if (rtc_config_ins.status == 4)
   {
+    rtcset();
     uart_sendmsg("config done",'n');
     rtc_config_ins.status = -1;
     return;
