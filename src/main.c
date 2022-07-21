@@ -11,69 +11,48 @@
 #define BAUDRATE ((F_CPU)/(UART_BAUD*16UL)-1)
 #define RTC_ADDR_1 0x68
 #define RTC_ADDR_2 0xD0
-#define PORTB_SEG_MASK 0x3E
-#define PORTB_DIG_MASK 0x81
+#define PORTB_SEG_MASK 0x56
+#define PORTB_DIG_MASK 0x89
 #define PORTB_SEG 0
 #define PORTB_DIG 0
 #define PORTC_SEG_MASK 0x07
-//#define PORTC_DIG_MASK 0x00
+#define PORTC_DIG_MASK 0x08
 #define PORTC_SEG 1
-//#define PORTD_SEG_MASK 0x00
-#define PORTD_DIG_MASK 0xE0
-#define PORTD_DIG 1
-#define PORTC_COL 0x04
-#define PORTD_COL 0x40
+#define PORTC_DIG 1
+#define PORTB_COL 0x20
 
 // 7seg
 unsigned int segmat[10][2] =
 {
-  {0x3E,0x01},
-  {0x0C,0x00},
-  {0x36,0x02},
-  {0x1E,0x02},
-  {0x0C,0x03},
-  {0x1A,0x03},
-  {0x3A,0x03},
-  {0x0E,0x00},
-  {0x3E,0x03},
-  {0x1E,0x03}
+  {0x54,0x07},
+  {0x10,0x01},
+  {0x46,0x05},
+  {0x52,0x05},
+  {0x12,0x03},
+  {0x52,0x06},
+  {0x56,0x06},
+  {0x10,0x05},
+  {0x56,0x07},
+  {0x52,0x07}
 };
 //Y 0,1,2,3,4,5,6,7,8,9
-//X a,b,c,d,e,f,g,:(A-F PB[0-5], G: PC[01])
-//: is always 0
-//Z PB,PC. use PORTB_SEG and PORTC_SEG_MASK
+//X a,b,c,d,e,f,g (PB0-7/PC0-3))
+//Z PB,PC. use PORT_SEG and PORT_SEG_MASK
 
 unsigned int digmat[4][2] =
 {
   {0x01,0x00},
-  {0x00,0x80},
-  {0x00,0x20},
-  {0x80,0x00}
-//  {0x00,0x40}
+  {0x08,0x00},
+  {0x80,0x00},
+  {0x00,0x08}
 };
 //
-//PB,PD. use PORTB_DIG and PORTD_DIG
+//PB,PC. use PORTB_DIG and PORTC_DIG
 
 //port assign
 /*
-PB0 - 1
-PB1 - A
-PB2 - B
-PB3 - C
-PB4 - D
-PB5 - E
-PB6 - MD1
-PB7 - 5
-PC0 - F
-PC1 - G
-PC2 - :
-PC3 - 
-PD2 - SET1
-PD3 - SET2
-PD4 - MD2
-PD5 - 4
-PD6 - 3(:)
-PD7 - 2
+PB0
+
 */
 
 // TIMER0 for filament drive
@@ -125,12 +104,12 @@ void timer_init(void){
 ISR(TIMER0_OVF_vect){
 	if (!md)
   {
-    PORTB |= 0x40;
-    PORTD &= ~0x10;
+    PORTD |= 0x40;
+    PORTD &= ~0x80;
     md = 1;
   }else{
-    PORTB &= ~0x40;
-    PORTD |= 0x10;
+    PORTD |= 0x80;
+    PORTD &= ~0x40;
     md =0;
   }
 }
@@ -195,8 +174,8 @@ ISR(INT1_vect){
 // port modules
 
 void port_init(void){
-  DDRB |= 0xff;
-  DDRC |= 0x07;
+  DDRB |= (PORTB_SEG_MASK | PORTB_DIG_MASK | PORTB_COL);
+  DDRC |= (PORTC_SEG_MASK | PORTC_DIG_MASK);
   DDRD |= 0xe0;
   PORTD |= 0x0c; //pull-up
 }
@@ -349,19 +328,17 @@ void vfd_atom_drive(int dig[],int col){
   for (size_t i = 0; i < 4; i++){
     int tmp = dig[i];
     PORTB &= ~(PORTB_SEG_MASK | PORTB_DIG_MASK);
-    PORTC &= ~PORTC_SEG_MASK;
-    PORTD &= ~PORTD_DIG_MASK;
-    _delay_us(1);
+    PORTC &= ~(PORTC_SEG_MASK | PORTC_DIG_MASK);
+    _delay_us(2);
     PORTB |= (segmat[tmp][PORTB_SEG] | digmat[i][PORTB_DIG]);
+    PORTC |= (segmat[tmp][PORTC_SEG] | digmat[i][PORTC_DIG]);
     if (col)
     {
-      PORTC |= (segmat[tmp][PORTC_SEG] | PORTC_COL);
-      PORTD |= (digmat[i][PORTD_DIG] | PORTD_COL);
+      PORTB |= PORTB_COL;
     } else {
-      PORTC |= (segmat[tmp][PORTC_SEG] & ~PORTC_COL);
-      PORTD |= (digmat[i][PORTD_DIG] & ~PORTD_COL);
+      PORTB &= ~PORTB_COL;
     }
-    _delay_us(99);
+    _delay_us(98);
   }
 }
 
@@ -370,17 +347,15 @@ void vfd_time_drive(int col){
     //int tmp = (rtc_data_ins.dig[i]!=0)?rtc_data_ins.dig[i]-1:0;
     int tmp = rtc_data_ins.dig[i];
     PORTB &= ~(PORTB_SEG_MASK | PORTB_DIG_MASK);
-    PORTC &= ~PORTC_SEG_MASK;
-    PORTD &= ~PORTD_DIG_MASK;
+    PORTC &= ~(PORTC_SEG_MASK | PORTC_DIG_MASK);
     _delay_us(1);
     PORTB |= (segmat[tmp][PORTB_SEG] | digmat[i][PORTB_DIG]);
+    PORTC |= (segmat[tmp][PORTC_SEG] | digmat[i][PORTC_DIG]);
     if (col)
     {
-      PORTC |= (segmat[tmp][PORTC_SEG] | PORTC_COL);
-      PORTD |= (digmat[i][PORTD_DIG] | PORTD_COL);
+      PORTB |= PORTB_COL;
     } else {
-      PORTC |= (segmat[tmp][PORTC_SEG] & ~PORTC_COL);
-      PORTD |= (digmat[i][PORTD_DIG] & ~PORTD_COL);
+      PORTB &= ~PORTB_COL;
     }
     _delay_us(99);
   }
